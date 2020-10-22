@@ -1,13 +1,20 @@
 package appconfig
 
 import (
+	"encoding/json"
 	"github.com/ksensehq/eventnative/authorization"
 	"github.com/ksensehq/eventnative/geo"
 	"github.com/ksensehq/eventnative/logging"
 	"github.com/ksensehq/eventnative/useragent"
 	"github.com/spf13/viper"
 	"io"
+	"io/ioutil"
+	"os"
 )
+
+type serverName struct {
+	ServerName string `json:"server_name"`
+}
 
 type AppConfig struct {
 	ServerName string
@@ -22,6 +29,8 @@ type AppConfig struct {
 }
 
 var Instance *AppConfig
+
+const fileDestination = "/resources/server.name"
 
 func setDefaultParams() {
 	viper.SetDefault("server.port", "8001")
@@ -40,7 +49,8 @@ func Init() error {
 
 	serverName := viper.GetString("server.name")
 	if serverName == "" {
-		serverName = "unnamed-server"
+		serverName = readServerName(fileDestination)
+		//serverName = "unnamed-server"
 	}
 
 	err := logging.InitGlobalLogger(logging.Config{
@@ -98,5 +108,41 @@ func (a *AppConfig) Close() {
 		if err := cl.Close(); err != nil {
 			logging.Error(err)
 		}
+	}
+}
+
+func readServerName(fileStr string) string {
+
+	file, err := os.Open(fileStr)
+	if err != nil {
+		return createFile(fileStr)
+	}
+	defer file.Close()
+	byteValue, err := ioutil.ReadAll(file)
+	if err != nil || len(byteValue) == 0 {
+		serverNameFileStruct := createFileStruct()
+		b, _ := json.Marshal(serverNameFileStruct)
+		file.Write(b)
+	}
+
+	var serverNameFromFile serverName
+	json.Unmarshal(byteValue, &serverNameFromFile)
+
+	return serverNameFromFile.ServerName
+}
+
+func createFile(fileStr string) string {
+	serverNameFile := createFileStruct()
+
+	file, _ := json.MarshalIndent(serverNameFile, "", " ")
+
+	_ = ioutil.WriteFile(fileStr, file, 0644)
+
+	return serverNameFile.ServerName
+}
+
+func createFileStruct() serverName {
+	return serverName{
+		ServerName: "unnamed-server",
 	}
 }
